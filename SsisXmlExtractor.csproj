@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net6.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Remove="GRJ_Presentation_Dimensions.dtsx" />
+    <None Remove="GRJ_Presentation_Dimensions_Campaign.dtsx" />
+    <None Remove="GRJ_Presentation_Facts_Operations.dtsx" />
+    <None Remove="GRJ_Presentation_Facts_Sales.dtsx" />
+  </ItemGroup>
+
+</Project>
