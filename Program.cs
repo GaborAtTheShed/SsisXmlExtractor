@@ -6,7 +6,7 @@ using SsisXmlExtractor;
 class Program
 {
     private static Regex sWhitespace = new Regex(@"\s+");
-    private const string OUTPUT_FILENAME = "ssis_sql_output.txt";
+    private const string OUTPUT_FILENAME = "ssis_sql_output";
 
     public static void Main(string[] args)
     {
@@ -16,13 +16,6 @@ class Program
         if (filePaths.Length == 0)
         {
             throw new Exception($"No dtsx files can be found at {currentDirectory}");
-        }
-
-        // Delete existing output file
-        var existingOutputFile = new FileInfo(currentDirectory + "\\" + OUTPUT_FILENAME);
-        if (existingOutputFile.Exists)
-        {
-            existingOutputFile.Delete();
         }
 
         XNamespace dtsNs = "www.microsoft.com/SqlServer/Dts";
@@ -48,6 +41,8 @@ class Program
                       ,
                         Name = x.Attribute("name").Value
                       ,
+                        DataFlowTaskName = x.Ancestors(dtsNs + "Executable").Select(y => y.Attribute(dtsNs + "ObjectName").Value).FirstOrDefault()
+                      ,
                         ComponentId = x.Attribute("componentClassID").Value
                       ,
                         Disabled = x.Ancestors(dtsNs + "Executable")
@@ -70,11 +65,12 @@ class Program
                     {
                         FileName = fileName,
                         RefId = record.RefId,
+                        DataFlowTaskName = record.DataFlowTaskName,
                         TaskName = record.Name,
                         TaskType = record.ComponentId,
                         TaskOrParentDisabled = record.Disabled,
                         Sql = record.PropertyValue,
-                        TableNames = GetTables(record.PropertyValue)
+                        MatchedSqlObjectName = ""
                     });
                 }
 
@@ -104,26 +100,34 @@ class Program
                     {
                         FileName = fileName,
                         RefId = record.RefId,
+                        DataFlowTaskName = "",
                         TaskName = record.Name,
                         TaskType = record.ExecutableType,
                         TaskOrParentDisabled = record.Disabled,
                         Sql = record.PropertyValue,
-                        TableNames = GetTables(record.PropertyValue)
+                        MatchedSqlObjectName = ""
                     }); ;
                 }
             }
-            catch (Exception)
+            catch (Exception ex)
             {
-                Console.WriteLine($"Error while processing {fileName}");
-                throw;
+                Console.ForegroundColor = ConsoleColor.Red;
+                Console.WriteLine($"Error while processing {fileName}: {ex.Message}, {ex.StackTrace}");
+                Console.ForegroundColor = ConsoleColor.Blue;
+                Console.WriteLine("To continue processing the rest of the files, press any key.");
+                Console.ResetColor();
+                
+                Console.ReadKey();
             }
         }
         
         listForExport.OrderBy(l => l.RefId).ThenBy(l => l.TaskName);
 
+        var fileNameWithDate = OUTPUT_FILENAME + $"_{DateTime.Now:yyyy-MM-ddTHHmmss}.txt";
+
         var fileHelperEngine = new FileHelperEngine<DelimitedFile>();
         fileHelperEngine.HeaderText = fileHelperEngine.GetFileHeader();
-        fileHelperEngine.WriteFile(OUTPUT_FILENAME, listForExport);
+        fileHelperEngine.WriteFile(fileNameWithDate, listForExport);
     }
     private static string ReplaceWhiteSpaceAndOtherChars(string input)
     {
@@ -137,24 +141,24 @@ class Program
 
         return sWhitespace.Replace(input, " ");
     }
-    // TODO: this is not working fully
-    public static string? GetTables(string? query)
-    {
-        if (string.IsNullOrEmpty(query))
-        {
-            return query;
-        }
 
-        List<string> tables = new List<string>();
+    //public static string? GetTables(string? query)
+    //{
+    //    if (string.IsNullOrEmpty(query))
+    //    {
+    //        return query;
+    //    }
 
-        string pattern = @"(from|join|into)\s+([`]\w+.+\w+\s*[`]|(\[)\w+.+\w+\s*(\])|\w+\s*\.+\s*\w*|\w+\b)";
+    //    List<string> tables = new List<string>();
 
-        foreach (Match m in Regex.Matches(query, pattern, RegexOptions.IgnoreCase))
-        {
-            string name = m.Groups[2].Value;
-            tables.Add(name);
-        }
+    //    string pattern = @"(from|join|into)\s+([`]\w+.+\w+\s*[`]|(\[)\w+.+\w+\s*(\])|\w+\s*\.+\s*\w*|\w+\b)";
 
-        return string.Join(", ", tables);
-    }
+    //    foreach (Match m in Regex.Matches(query, pattern, RegexOptions.IgnoreCase))
+    //    {
+    //        string name = m.Groups[2].Value;
+    //        tables.Add(name);
+    //    }
+
+    //    return string.Join(", ", tables);
+    //}
 }

@@ -12,10 +12,11 @@ namespace SsisXmlExtractor
     {
         public string? FileName { get; set; }
         public string? RefId { get; set; }
+        public string? DataFlowTaskName { get; set; }
         public string? TaskName { get; set; }
         public string? TaskType { get; set; }
         public string? TaskOrParentDisabled { get; set; }
         public string? Sql { get; set; }
-        public string? TableNames { get; set; }
+        public string? MatchedSqlObjectName { get; set; }
     }
 }
