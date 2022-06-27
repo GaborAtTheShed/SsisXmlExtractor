@@ -177,6 +177,8 @@ class Program
         {
             if (ssisSql.Sql != null)
             {
+                // Only first match is returned that is the same length as the matched string
+                // This means that in multi-table SELECT statements only the first table is found
                 var matchedObjects = listOfSqlObjects
                     .Where(l => ssisSql.Sql.Contains(l.SqlObjectName, StringComparison.InvariantCultureIgnoreCase))
                     .OrderByDescending(l => l.SqlObjectName.Length)
@@ -185,6 +187,8 @@ class Program
                 if (matchedObjects != null)
                 {
                     ssisSql.MatchedSqlObjectName = matchedObjects.SqlObjectName;
+                    ssisSql.MatchedSqlObjectType = matchedObjects.SqlObjectType;
+                    ssisSql.MatcheSqlObjectLocation = matchedObjects.SqlObjectLocation;
 
                     if (!matchedSqlObjects.Contains(matchedObjects))
                     {

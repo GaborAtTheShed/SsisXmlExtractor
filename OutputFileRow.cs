@@ -18,5 +18,7 @@ namespace SsisXmlExtractor
         public string? TaskOrParentDisabled { get; set; }
         public string? Sql { get; set; }
         public string? MatchedSqlObjectName { get; set; }
+        public string? MatchedSqlObjectType { get; set; }
+        public string? MatcheSqlObjectLocation { get; set; }
     }
 }
