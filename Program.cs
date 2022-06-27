@@ -79,7 +79,6 @@ class Program
                         ComponentId = x.Attribute("componentClassID").Value
                       ,
                         Disabled = x.Ancestors(dtsNs + "Executable")
-                        //.Select(y => y.Attribute(dtsNs + "ExecutableType").Value).FirstOrDefault()
                             .Select(y => y.Attribute(dtsNs + "Disabled") == null ? "False" : y.Attribute(dtsNs + "Disabled").Value).FirstOrDefault()
                       ,
                         PropertyValue = x.Descendants("property")
@@ -109,7 +108,6 @@ class Program
 
                 var sqlStatements = document
                     .Descendants(dtsNs + "Executable")
-                    //.Where(x => x.Attribute(dtsNs + "Disabled") || x.Attribute(dtsNs + "Disabled").Value == "True")
                     .Where(x => x.Attribute(dtsNs + "CreationName").Value == "Microsoft.ExecuteSQLTask")
                     .Select(x => new
                     {
@@ -160,14 +158,14 @@ class Program
 
         var fileSuffixWithExtension = $"_{DateTime.Now:yyyy-MM-ddTHHmmss}.txt";
         var outputFileName = OUTPUT_FILENAME + fileSuffixWithExtension;
-        var matchedSqlObjectsFileName = "matched_Sql_Objects" + fileSuffixWithExtension;
+        var matchedSqlObjectsFileName = "matched_sql_objects" + fileSuffixWithExtension;
 
         var outputFileEngine = new FileHelperEngine<OutputFileRow>();
         outputFileEngine.HeaderText = outputFileEngine.GetFileHeader();
         outputFileEngine.WriteFile(outputFileName, listForExport);
 
-        var unmatchedSqlObjectEngine = new FileHelperEngine<SqlObject>();
-        unmatchedSqlObjectEngine.WriteFile(matchedSqlObjectsFileName, matchedSqlObjects);
+        var SqlObjectEngine = new FileHelperEngine<SqlObject>();
+        SqlObjectEngine.WriteFile(matchedSqlObjectsFileName, matchedSqlObjects);
     }
 
     private static List<SqlObject> MatchSqlObjectsInList(List<OutputFileRow> listForExport, List<SqlObject> listOfSqlObjects)
