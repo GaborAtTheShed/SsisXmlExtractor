@@ -6,7 +6,7 @@ using SsisXmlExtractor;
 class Program
 {
     private static Regex sWhitespace = new Regex(@"\s+");
-    private const string OUTPUT_FILENAME = "ssis_sql_output.csv";
+    private const string OUTPUT_FILENAME = "ssis_sql_output.txt";
 
     public static void Main(string[] args)
     {
@@ -50,12 +50,16 @@ class Program
                       ,
                         ComponentId = x.Attribute("componentClassID").Value
                       ,
+                        Disabled = x.Ancestors(dtsNs + "Executable")
+                        //.Select(y => y.Attribute(dtsNs + "ExecutableType").Value).FirstOrDefault()
+                            .Select(y => y.Attribute(dtsNs + "Disabled") == null ? "False" : y.Attribute(dtsNs + "Disabled").Value).FirstOrDefault()
+                      ,
                         PropertyValue = x.Descendants("property")
 
                             .Where(z => z.Attribute("name").Value == "OpenRowset"
                                 || z.Attribute("name").Value == "SqlCommand"
                                 || z.Attribute("name").Value == "TableOrViewName")
-                            .Select(z => ReplaceWhitespace(z.Value))
+                            .Select(z => ReplaceWhiteSpaceAndOtherChars(z.Value))
                             .FirstOrDefault(z => !string.IsNullOrEmpty(z))
                     })
                     .ToList();
@@ -68,6 +72,7 @@ class Program
                         RefId = record.RefId,
                         TaskName = record.Name,
                         TaskType = record.ComponentId,
+                        TaskOrParentDisabled = record.Disabled,
                         Sql = record.PropertyValue,
                         TableNames = GetTables(record.PropertyValue)
                     });
@@ -75,7 +80,7 @@ class Program
 
                 var sqlStatements = document
                     .Descendants(dtsNs + "Executable")
-                    //.Where(x => string.IsNullOrEmpty(x.Attribute(dtsNs + "Disabled").ToString()))
+                    //.Where(x => x.Attribute(dtsNs + "Disabled") || x.Attribute(dtsNs + "Disabled").Value == "True")
                     .Where(x => x.Attribute(dtsNs + "CreationName").Value == "Microsoft.ExecuteSQLTask")
                     .Select(x => new
                     {
@@ -84,9 +89,11 @@ class Program
                         Name = x.Attribute(dtsNs + "ObjectName").Value
                       ,
                         ExecutableType = x.Attribute(dtsNs + "ExecutableType").Value
+                      , 
+                        Disabled = (x.Attribute(dtsNs + "Disabled") == null ? "False" : x.Attribute(dtsNs + "Disabled").Value)
                       ,
                         PropertyValue = x.Descendants(sqlTaskNs + "SqlTaskData")
-                                            .Select(x => ReplaceWhitespace(x.Attribute(sqlTaskNs + "SqlStatementSource").Value))
+                                            .Select(x => ReplaceWhiteSpaceAndOtherChars(x.Attribute(sqlTaskNs + "SqlStatementSource").Value))
                                             .FirstOrDefault()
                     })
                     .ToList();
@@ -99,6 +106,7 @@ class Program
                         RefId = record.RefId,
                         TaskName = record.Name,
                         TaskType = record.ExecutableType,
+                        TaskOrParentDisabled = record.Disabled,
                         Sql = record.PropertyValue,
                         TableNames = GetTables(record.PropertyValue)
                     }); ;
@@ -117,16 +125,20 @@ class Program
         fileHelperEngine.HeaderText = fileHelperEngine.GetFileHeader();
         fileHelperEngine.WriteFile(OUTPUT_FILENAME, listForExport);
     }
-    private static string ReplaceWhitespace(string input)
+    private static string ReplaceWhiteSpaceAndOtherChars(string input)
     {
         if (string.IsNullOrEmpty(input))
         {
             return input;
         }
+        input = input.Replace("[", "");
+        input = input.Replace("]", "");
+        input = input.Replace("\"", "");
+
         return sWhitespace.Replace(input, " ");
     }
     // TODO: this is not working fully
-    public static string GetTables(string query)
+    public static string? GetTables(string? query)
     {
         if (string.IsNullOrEmpty(query))
         {
@@ -134,8 +146,6 @@ class Program
         }
 
         List<string> tables = new List<string>();
-        query = query.Replace("[", "");
-        query = query.Replace("]", "");
 
         string pattern = @"(from|join|into)\s+([`]\w+.+\w+\s*[`]|(\[)\w+.+\w+\s*(\])|\w+\s*\.+\s*\w*|\w+\b)";
 
