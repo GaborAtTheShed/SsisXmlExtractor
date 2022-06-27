@@ -21,7 +21,8 @@ UNION ALL
 SELECT name, type_desc, 'db2' AS db FROM db2.sys.objects
 WHERE type IN	('U', 'V', 'P')
 
-UNION ALL
+-- more UNION ALL tables etc.
 
-...
+) as all_tables
+ORDER BY all_tables.type_desc, all_tables.name
 ```
