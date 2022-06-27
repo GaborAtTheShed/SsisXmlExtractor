@@ -7,23 +7,56 @@ class Program
 {
     private static Regex sWhitespace = new Regex(@"\s+");
     private const string OUTPUT_FILENAME = "ssis_sql_output";
+    private const string SQL_OBJECTS_FILENAME = "sql_objects.txt";
 
     public static void Main(string[] args)
     {
-        var currentDirectory = Directory.GetCurrentDirectory();
-        var filePaths = Directory.GetFiles(currentDirectory, "*.dtsx");
+        Console.ResetColor();
 
-        if (filePaths.Length == 0)
+        var currentDirectory = Directory.GetCurrentDirectory();
+
+        var sqlObjectsFile = Directory.GetFiles(currentDirectory, SQL_OBJECTS_FILENAME);
+        var dtsxFilePaths = Directory.GetFiles(currentDirectory, "*.dtsx");
+        List<SqlObject> listOfSqlObjects = new();
+
+        if (sqlObjectsFile.Length == 0)
         {
-            throw new Exception($"No dtsx files can be found at {currentDirectory}");
+            Console.WriteLine($"Can't find {SQL_OBJECTS_FILENAME}, continue without matching objects? Press Y to continue, otherwise any key to exit.");
+            var answer = Console.ReadKey().Key;
+            if (answer != ConsoleKey.Y)
+            {
+                Environment.Exit(0);
+            }
+        }
+        else
+        {
+            try
+            {
+                var readEngine = new FileHelperEngine<SqlObject>();
+                listOfSqlObjects = readEngine.ReadFile(SQL_OBJECTS_FILENAME).ToList();
+                Console.WriteLine($"{sqlObjectsFile[0]} has been loaded.");
+            }
+            catch (Exception ex)
+            {
+                Console.ForegroundColor = ConsoleColor.Red;
+                Console.WriteLine($"There was a problem loading {SQL_OBJECTS_FILENAME}: {ex.Message}, {ex.StackTrace}");
+            }
+        }
+
+        if (dtsxFilePaths.Length == 0)
+        {
+            Console.ForegroundColor = ConsoleColor.Red;
+            Console.WriteLine($"No dtsx files can be found at {currentDirectory}");
+
+            Environment.Exit(0);
         }
 
         XNamespace dtsNs = "www.microsoft.com/SqlServer/Dts";
         XNamespace sqlTaskNs = "www.microsoft.com/sqlserver/dts/tasks/sqltask";
         
-        List<DelimitedFile> listForExport = new ();
+        List<OutputFileRow> listForExport = new ();
 
-        foreach (var file in filePaths)
+        foreach (var file in dtsxFilePaths)
         {
             var fileName = new FileInfo(file).Name;
             
@@ -61,7 +94,7 @@ class Program
 
                 foreach (var record in componentData)
                 {
-                    listForExport.Add(new DelimitedFile
+                    listForExport.Add(new OutputFileRow
                     {
                         FileName = fileName,
                         RefId = record.RefId,
@@ -96,7 +129,7 @@ class Program
 
                 foreach (var record in sqlStatements)
                 {
-                    listForExport.Add(new DelimitedFile
+                    listForExport.Add(new OutputFileRow
                     {
                         FileName = fileName,
                         RefId = record.RefId,
@@ -123,12 +156,50 @@ class Program
         
         listForExport.OrderBy(l => l.RefId).ThenBy(l => l.TaskName);
 
-        var fileNameWithDate = OUTPUT_FILENAME + $"_{DateTime.Now:yyyy-MM-ddTHHmmss}.txt";
+        var matchedSqlObjects = MatchSqlObjectsInList(listForExport, listOfSqlObjects);
 
-        var fileHelperEngine = new FileHelperEngine<DelimitedFile>();
-        fileHelperEngine.HeaderText = fileHelperEngine.GetFileHeader();
-        fileHelperEngine.WriteFile(fileNameWithDate, listForExport);
+        var fileSuffixWithExtension = $"_{DateTime.Now:yyyy-MM-ddTHHmmss}.txt";
+        var outputFileName = OUTPUT_FILENAME + fileSuffixWithExtension;
+        var matchedSqlObjectsFileName = "matched_Sql_Objects" + fileSuffixWithExtension;
+
+        var outputFileEngine = new FileHelperEngine<OutputFileRow>();
+        outputFileEngine.HeaderText = outputFileEngine.GetFileHeader();
+        outputFileEngine.WriteFile(outputFileName, listForExport);
+
+        var unmatchedSqlObjectEngine = new FileHelperEngine<SqlObject>();
+        unmatchedSqlObjectEngine.WriteFile(matchedSqlObjectsFileName, matchedSqlObjects);
     }
+
+    private static List<SqlObject> MatchSqlObjectsInList(List<OutputFileRow> listForExport, List<SqlObject> listOfSqlObjects)
+    {
+        Console.WriteLine("Matching SSIS objects to SQL objects...");
+        List<SqlObject> matchedSqlObjects = new ();
+
+        foreach (var ssisSql in listForExport)
+        {
+            if (ssisSql.Sql != null)
+            {
+                var matchedObjects = listOfSqlObjects
+                    .Where(l => ssisSql.Sql.Contains(l.SqlObjectName, StringComparison.InvariantCultureIgnoreCase))
+                    .OrderByDescending(l => l.SqlObjectName.Length)
+                    .FirstOrDefault();
+
+                if (matchedObjects != null)
+                {
+                    ssisSql.MatchedSqlObjectName = matchedObjects.SqlObjectName;
+
+                    if (!matchedSqlObjects.Contains(matchedObjects))
+                    {
+                        matchedSqlObjects.Add(matchedObjects);
+                    }
+                }
+            }
+        }
+
+        Console.WriteLine("Done!");
+        return matchedSqlObjects;
+    }
+
     private static string ReplaceWhiteSpaceAndOtherChars(string input)
     {
         if (string.IsNullOrEmpty(input))

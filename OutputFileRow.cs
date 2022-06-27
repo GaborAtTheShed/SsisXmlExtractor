@@ -8,7 +8,7 @@ using System.Threading.Tasks;
 namespace SsisXmlExtractor
 {
     [DelimitedRecord("\t")]
-    public class DelimitedFile
+    public class OutputFileRow
     {
         public string? FileName { get; set; }
         public string? RefId { get; set; }
