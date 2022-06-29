@@ -102,7 +102,8 @@ class Program
                         TaskType = record.ComponentId,
                         TaskOrParentDisabled = record.Disabled,
                         Sql = record.PropertyValue,
-                        MatchedSqlObjectName = ""
+                        ExtractedTableNames = string.Join(", ", ExtractTableNames(record.PropertyValue)),
+                        MatchFound = ""
                     });
                 }
 
@@ -136,7 +137,8 @@ class Program
                         TaskType = record.ExecutableType,
                         TaskOrParentDisabled = record.Disabled,
                         Sql = record.PropertyValue,
-                        MatchedSqlObjectName = ""
+                        ExtractedTableNames = string.Join(", ", ExtractTableNames(record.PropertyValue)),
+                        MatchFound = ""
                     }); ;
                 }
             }
@@ -164,42 +166,89 @@ class Program
         outputFileEngine.HeaderText = outputFileEngine.GetFileHeader();
         outputFileEngine.WriteFile(outputFileName, listForExport);
 
-        var SqlObjectEngine = new FileHelperEngine<SqlObject>();
-        SqlObjectEngine.WriteFile(matchedSqlObjectsFileName, matchedSqlObjects);
+        var sqlObjectEngine = new FileHelperEngine<MatchedSqlObject>();
+        sqlObjectEngine.HeaderText = sqlObjectEngine.GetFileHeader();
+        sqlObjectEngine.WriteFile(matchedSqlObjectsFileName, matchedSqlObjects);
     }
 
-    private static List<SqlObject> MatchSqlObjectsInList(List<OutputFileRow> listForExport, List<SqlObject> listOfSqlObjects)
+    private static List<MatchedSqlObject> MatchSqlObjectsInList(List<OutputFileRow> listForExport, List<SqlObject> listOfSqlObjects)
     {
         Console.WriteLine("Matching SSIS objects to SQL objects...");
-        List<SqlObject> matchedSqlObjects = new ();
+        List<MatchedSqlObject> matchedObjectsOutput = new ();
+        List<MatchedSqlObject> matchedObjectsTemp = new ();
 
         foreach (var ssisSql in listForExport)
         {
+            matchedObjectsTemp.Clear();
+
             if (ssisSql.Sql != null)
             {
-                // Only first match is returned that is the same length as the matched string
-                // This means that in multi-table SELECT statements only the first table is found
-                var matchedObjects = listOfSqlObjects
+                var firstMatchFromSqlScript = listOfSqlObjects
                     .Where(l => ssisSql.Sql.Contains(l.SqlObjectName, StringComparison.InvariantCultureIgnoreCase))
                     .OrderByDescending(l => l.SqlObjectName.Length)
                     .FirstOrDefault();
 
-                if (matchedObjects != null)
+                if (firstMatchFromSqlScript != null)
                 {
-                    ssisSql.MatchedSqlObjectName = matchedObjects.SqlObjectName;
-                    ssisSql.MatchedSqlObjectType = matchedObjects.SqlObjectType;
-                    ssisSql.MatcheSqlObjectLocation = matchedObjects.SqlObjectLocation;
-
-                    if (!matchedSqlObjects.Contains(matchedObjects))
+                    matchedObjectsTemp.Add(new MatchedSqlObject
                     {
-                        matchedSqlObjects.Add(matchedObjects);
+                        SqlObjectName = firstMatchFromSqlScript.SqlObjectName,
+                        SqlObjectLocation = firstMatchFromSqlScript.SqlObjectLocation,
+                        SqlObjectType = firstMatchFromSqlScript.SqlObjectType,
+                        PackageName = ssisSql.FileName,
+                        RefId = ssisSql.RefId,
+                        TaskOrParentDisabled = ssisSql.TaskOrParentDisabled
+                    });
+                }
+
+                var extractedTableNames = ExtractTableNames(ssisSql.Sql);
+
+                if (extractedTableNames != null && extractedTableNames.Count > 1)
+                {
+                    foreach (var tableName in extractedTableNames)
+                    {
+                        var matchFromExtractedTableNames = listOfSqlObjects
+                            .Where(l => tableName.Contains(l.SqlObjectName, StringComparison.InvariantCultureIgnoreCase))
+                            .OrderByDescending(l => l.SqlObjectName.Length)
+                            .FirstOrDefault();
+
+                        if (matchFromExtractedTableNames != null)
+                        {
+                            if (!matchedObjectsTemp.Any(m => m.SqlObjectName == matchFromExtractedTableNames.SqlObjectName))
+                            {
+                                matchedObjectsTemp.Add(new MatchedSqlObject
+                                {
+                                    SqlObjectName = matchFromExtractedTableNames.SqlObjectName,
+                                    SqlObjectLocation = matchFromExtractedTableNames.SqlObjectLocation,
+                                    SqlObjectType = matchFromExtractedTableNames.SqlObjectType,
+                                    PackageName = ssisSql.FileName,
+                                    RefId = ssisSql.RefId,
+                                    TaskOrParentDisabled = ssisSql.TaskOrParentDisabled
+                                });
+                            }
+                        }
                     }
                 }
+
+                if (matchedObjectsTemp != null && matchedObjectsTemp.Count > 0)
+                {
+                    
+                    foreach (var matchedSqlObject in matchedObjectsTemp)
+                    {
+                        matchedObjectsOutput.Add(matchedSqlObject);
+                    }
+                }
+
+                ssisSql.MatchFound = matchedObjectsTemp.Count.ToString();
+            }
+            else
+            {
+                ssisSql.MatchFound = "n/a";
             }
         }
 
         Console.WriteLine("Done!");
-        return matchedSqlObjects;
+        return matchedObjectsOutput;
     }
 
     private static string ReplaceWhiteSpaceAndOtherChars(string input)
@@ -215,23 +264,23 @@ class Program
         return sWhitespace.Replace(input, " ");
     }
 
-    //public static string? GetTables(string? query)
-    //{
-    //    if (string.IsNullOrEmpty(query))
-    //    {
-    //        return query;
-    //    }
+    private static List<string> ExtractTableNames(string? query)
+    {
+        List<string> tables = new List<string>();
+        
+        if (string.IsNullOrEmpty(query))
+        {
+            return tables;
+        }
 
-    //    List<string> tables = new List<string>();
+        string pattern = @"(from|join|into)\s+([`]\w+.+\w+\s*[`]|(\[)\w+.+\w+\s*(\])|\w+\s*\.+\s*\w*|\w+\b)";
 
-    //    string pattern = @"(from|join|into)\s+([`]\w+.+\w+\s*[`]|(\[)\w+.+\w+\s*(\])|\w+\s*\.+\s*\w*|\w+\b)";
+        foreach (Match m in Regex.Matches(query, pattern, RegexOptions.IgnoreCase))
+        {
+            string name = m.Groups[2].Value;
+            tables.Add(name);
+        }
 
-    //    foreach (Match m in Regex.Matches(query, pattern, RegexOptions.IgnoreCase))
-    //    {
-    //        string name = m.Groups[2].Value;
-    //        tables.Add(name);
-    //    }
-
-    //    return string.Join(", ", tables);
-    //}
+        return tables;
+    }
 }
