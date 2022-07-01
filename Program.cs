@@ -146,7 +146,6 @@ class Program
             {
                 Console.ForegroundColor = ConsoleColor.Red;
                 Console.WriteLine($"Error while processing {fileName}: {ex.Message}, {ex.StackTrace}");
-                Console.ForegroundColor = ConsoleColor.Blue;
                 Console.WriteLine("To continue processing the rest of the files, press any key.");
                 Console.ResetColor();
                 
